@@ -1,4 +1,4 @@
-// backend/server.js - VERSÃO COMPLETA E CORRIGIDA
+
 
 require('dotenv').config();
 const express = require('express');
