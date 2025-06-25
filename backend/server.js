@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 |--------------------------------------------------------------------------
 */
 
-// ROTA PARA LISTAR TODAS AS ESTANTES
+// ROTA PARA LISTAR TODAS AS ESTANTES (Nenhuma mudança necessária aqui)
 app.get('/api/estantes', async (req, res) => {
     try {
         const estantes = await db('Estantes').select('*').orderBy('nome_estante', 'asc');
@@ -26,16 +26,23 @@ app.get('/api/estantes', async (req, res) => {
     }
 });
 
-// ROTA PARA CRIAR UMA NOVA ESTANTE
+// --- MUDANÇA 1: ROTA DE CRIAR ESTANTE ---
 app.post('/api/estantes', async (req, res) => {
     try {
         const { nome_estante } = req.body;
         if (!nome_estante || nome_estante.trim() === '') {
             return res.status(400).json({ message: "O nome da estante é obrigatório." });
         }
-        const [id] = await db('Estantes').insert({ nome_estante });
-        res.status(201).json({ id_estante: id, nome_estante });
+        
+        // Ajustado com .returning('*') para ser compatível com PostgreSQL
+        const [estanteAdicionada] = await db('Estantes')
+            .insert({ nome_estante: nome_estante.trim() })
+            .returning('*');
+
+        res.status(201).json(estanteAdicionada);
+
     } catch (error) {
+        // O código de erro '23505' é para violação de unicidade no PostgreSQL. O seu já estava correto!
         if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
             return res.status(409).json({ message: "Uma estante com este nome já existe." });
         }
@@ -44,7 +51,7 @@ app.post('/api/estantes', async (req, res) => {
     }
 });
 
-// ROTA PARA ATUALIZAR NOME DA ESTANTE
+// ROTA PARA ATUALIZAR NOME DA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
 app.put('/api/estantes/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -53,7 +60,7 @@ app.put('/api/estantes/:id', async (req, res) => {
             return res.status(400).json({ message: "O nome da estante é obrigatório." });
         }
 
-        const count = await db('Estantes').where({ id_estante: id }).update({ nome_estante });
+        const count = await db('Estantes').where({ id_estante: id }).update({ nome_estante: nome_estante.trim() });
 
         if (count > 0) {
             res.status(200).json({ message: "Estante atualizada com sucesso." });
@@ -69,16 +76,14 @@ app.put('/api/estantes/:id', async (req, res) => {
     }
 });
 
-// ROTA PARA DELETAR UMA ESTANTE 
+// ROTA PARA DELETAR UMA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
 app.delete('/api/estantes/:id', async (req, res) => {
     try {
         const { id } = req.params;
         let success = false;
 
         await db.transaction(async trx => {
-            // Primeiro, remove as associações de livros com esta estante
             await trx('Livros_Estante').where({ id_estante_fk: id }).del();
-            // Depois, remove a estante
             const count = await trx('Estantes').where({ id_estante: id }).del();
             if (count > 0) {
                 success = true;
@@ -103,7 +108,7 @@ app.delete('/api/estantes/:id', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-// ROTA PARA LISTAR TODOS OS LIVROS DE UMA ESTANTE ESPECÍFICA
+// ROTA PARA LISTAR TODOS OS LIVROS DE UMA ESTANTE ESPECÍFICA (Nenhuma mudança necessária aqui)
 app.get('/api/estantes/:id/livros', async (req, res) => {
     try {
         const { id } = req.params;
@@ -119,7 +124,7 @@ app.get('/api/estantes/:id/livros', async (req, res) => {
     }
 });
 
-// ROTA PARA ADICIONAR UM LIVRO A UMA ESTANTE
+// --- MUDANÇA 2: ROTA DE ADICIONAR LIVRO ---
 app.post('/api/estantes/:id/livros', async (req, res) => {
     const { id: id_estante_fk } = req.params;
     const { google_book_id, titulo, autores, capa_url, descricao } = req.body;
@@ -136,19 +141,24 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
             if (livro) {
                 id_livro_fk = livro.id_livro;
             } else {
-                const [newId] = await trx('Livros').insert({
+                // Ajustado com .returning('id_livro') para ser compatível com PostgreSQL
+                const [livroInserido] = await trx('Livros').insert({
                     google_book_id,
                     titulo,
                     autores: autores ? autores.join(', ') : 'Autor desconhecido',
                     capa_url,
                     descricao
-                });
-                id_livro_fk = newId;
+                }).returning('id_livro'); // Pedimos para retornar o objeto com o ID
+
+                id_livro_fk = livroInserido.id_livro;
             }
             
             const existingRelation = await trx('Livros_Estante').where({ id_livro_fk, id_estante_fk }).first();
             if (existingRelation) {
-                throw new Error('DUPLICATE_ENTRY');
+                // Lançando um erro com uma mensagem específica para ser pego no catch
+                const err = new Error('DUPLICATE_ENTRY');
+                err.code = '23505'; // Simulando o código de erro para consistência
+                throw err;
             }
 
             await trx('Livros_Estante').insert({ id_livro_fk, id_estante_fk });
@@ -164,7 +174,7 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
     }
 });
 
-// ROTA PARA REMOVER UM LIVRO DE UMA ESTANTE
+// ROTA PARA REMOVER UM LIVRO DE UMA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
 app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
     try {
         const { shelfId, bookId } = req.params;
