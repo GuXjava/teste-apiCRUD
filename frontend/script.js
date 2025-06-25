@@ -1,12 +1,12 @@
-// frontend/script.js
-
 document.addEventListener('DOMContentLoaded', () => {
     const GOOGLE_API_URL = 'https://www.googleapis.com/books/v1/volumes';
-    
-    // MUDANÇA PRINCIPAL AQUI:
-    // 1. Apagamos a variável antiga "LOCAL_API_URL".
-    // 2. Criamos uma nova constante que pega o valor preparado pelo config.js.
     const API_BASE_URL = window.API_URL;
+
+    // --- MUDANÇA AQUI: Helper function para forçar HTTPS ---
+    const toHttps = (url) => {
+        if (!url) return 'https://via.placeholder.com/180x260.png?text=Sem+Capa';
+        return url.replace('http://', 'https://');
+    };
 
     const views = document.querySelectorAll('.view');
     const menuLinks = document.querySelectorAll('.sidebar-menu .menu-link');
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const shelfName = prompt("Digite o nome da nova estante:");
         if (shelfName?.trim()) {
             try {
-                const response = await fetch(`${API_BASE_URL}/estantes`, { // <-- MUDANÇA AQUI
+                const response = await fetch(`${API_BASE_URL}/estantes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nome_estante: shelfName.trim() })
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadShelves() {
         try {
-            const response = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError); // <-- MUDANÇA AQUI
+            const response = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError);
             const shelves = await response.json();
             
             const shelvesList = document.getElementById('shelves-list');
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newName = prompt("Digite o novo nome para a estante:", oldName);
         if (newName?.trim() && newName.trim() !== oldName) {
             try {
-                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { // <-- MUDANÇA AQUI
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nome_estante: newName.trim() })
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteShelf(shelfId, shelfName) {
         if (confirm(`Tem certeza que deseja excluir a estante "${shelfName}"?`)) {
             try {
-                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { method: 'DELETE' }); // <-- MUDANÇA AQUI
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { method: 'DELETE' });
                 await handleFetchError(response);
                 alert('Estante excluída com sucesso!');
                 if (currentShelf.id === shelfId) {
@@ -164,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switchView('shelf-view');
         
         try {
-            const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros`).then(handleFetchError); // <-- MUDANÇA AQUI
+            const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros`).then(handleFetchError);
             const books = await response.json();
             displayBooks(books, shelfBooksDiv, { context: 'shelf', shelfId });
         } catch(error) {
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function removeBookFromShelf(googleBookId, shelfId) {
         if (confirm("Tem certeza que deseja remover este livro da estante?")) {
             try {
-                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros/${googleBookId}`, { method: 'DELETE' }); // <-- MUDANÇA AQUI
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros/${googleBookId}`, { method: 'DELETE' });
                 await handleFetchError(response);
                 alert('Livro removido com sucesso!');
                 loadBooksFromShelf(shelfId, currentShelf.name);
@@ -218,7 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = document.createElement('div');
             card.className = 'book-card';
             
-            const imageUrl = book.volumeInfo?.imageLinks?.thumbnail || book.capa_url || 'https://via.placeholder.com/180x260.png?text=Sem+Capa';
+            // --- MUDANÇA AQUI: Usando a função toHttps ---
+            const imageUrl = toHttps(book.volumeInfo?.imageLinks?.thumbnail || book.capa_url);
             const title = book.volumeInfo?.title || book.titulo;
             
             card.innerHTML = `
@@ -247,7 +248,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('detail-title').textContent = info.title;
             document.getElementById('detail-author-name').textContent = info.authors?.join(', ') || 'Desconhecido';
             document.getElementById('detail-description').innerHTML = info.description || 'Sem descrição disponível.';
-            document.getElementById('detail-cover').src = info.imageLinks?.thumbnail || 'https://via.placeholder.com/300x450.png?text=Sem+Capa';
+            
+            // --- MUDANÇA AQUI: Usando a função toHttps ---
+            document.getElementById('detail-cover').src = toHttps(info.imageLinks?.thumbnail);
             
             document.getElementById('detail-add-to-shelf-btn').onclick = openAddToShelfModal;
             
@@ -305,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         try {
-            const response = await fetch(`${API_BASE_URL}/estantes/${selectedShelfId}/livros`, { // <-- MUDANÇA AQUI
+            const response = await fetch(`${API_BASE_URL}/estantes/${selectedShelfId}/livros`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookData)
