@@ -123,53 +123,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    async function loadShelves() {
-        try {
-            const shelves = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError);
-            shelvesList.innerHTML = '';
-            shelves.forEach(shelf => {
-                const shelfContainer = document.createElement('div');
-                shelfContainer.className = 'shelf-item-container';
-                shelfContainer.innerHTML = `
-                    <a href="#" class="shelf-link" data-shelf-id="${shelf.id}">${shelf.nome}</a>
-                    <div class="shelf-actions">
-                        <i class="fa-solid fa-pencil edit-shelf-btn" title="Renomear"></i>
-                        <i class="fa-solid fa-trash-can delete-shelf-btn" title="Excluir"></i>
-                    </div>
-                `;
-                shelvesList.appendChild(shelfContainer);
-            });
-            
-            // Adiciona os event listeners após criar os elementos
-            shelvesList.querySelectorAll('.shelf-link').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const shelfId = link.dataset.shelfId;
-                    loadBooksFromShelf(shelfId, link.textContent);
-                });
-            });
+async function loadShelves() {
+    try {
+        const shelves = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError);
+        const shelvesList = document.getElementById('shelves-list');
+        shelvesList.innerHTML = '';
 
-            shelvesList.querySelectorAll('.edit-shelf-btn').forEach((btn, index) => {
-                btn.addEventListener('click', () => editShelfName(shelves[index].id, shelves[index].nome));
+        // Popula a lista de estantes na barra lateral
+        shelves.forEach(shelf => {
+            const shelfContainer = document.createElement('div');
+            shelfContainer.className = 'shelf-item-container';
+            shelfContainer.innerHTML = `
+                <a href="#" class="shelf-link" data-shelf-id="${shelf.id_estante}">${shelf.nome}</a>
+                <div class="shelf-actions">
+                    <i class="fa-solid fa-pencil edit-shelf-btn" title="Renomear"></i>
+                    <i class="fa-solid fa-trash-can delete-shelf-btn" title="Excluir"></i>
+                </div>
+            `;
+            shelvesList.appendChild(shelfContainer);
+        });
+        
+        // Adiciona os event listeners para os elementos recém-criados
+        shelvesList.querySelectorAll('.shelf-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const shelfId = link.dataset.shelfId;
+                loadBooksFromShelf(shelfId, link.textContent);
             });
+        });
 
-            shelvesList.querySelectorAll('.delete-shelf-btn').forEach((btn, index) => {
-                btn.addEventListener('click', () => deleteShelf(shelves[index].id, shelves[index].nome));
-            });
-            
-            // Atualiza o select do modal também
-            const modalShelfSelect = document.getElementById('modal-shelf-select');
-            modalShelfSelect.innerHTML = '';
-            shelves.forEach(shelf => {
-                const option = new Option(shelf.nome, shelf.id);
-                modalShelfSelect.add(option);
-            });
+        shelvesList.querySelectorAll('.edit-shelf-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => editShelfName(shelves[index].id_estante, shelves[index].nome));
+        });
 
-        } catch (error) {
-            shelvesList.innerHTML = '<li>Erro ao carregar estantes.</li>';
-            console.error('Erro em loadShelves:', error);
-        }
+        shelvesList.querySelectorAll('.delete-shelf-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => deleteShelf(shelves[index].id_estante, shelves[index].nome));
+        });
+        
+        // --- A CORREÇÃO PRINCIPAL ESTÁ AQUI ---
+        // Limpa e popula o menu <select> do modal com os valores corretos
+        const modalShelfSelect = document.getElementById('modal-shelf-select');
+        modalShelfSelect.innerHTML = '';
+        shelves.forEach(shelf => {
+            // A sintaxe é: new Option(TEXTO_VISIVEL, VALOR_INTERNO);
+            // O valor interno DEVE ser o ID numérico da estante para a API funcionar.
+            const option = new Option(shelf.nome, shelf.id_estante); // <<< A LINHA MAIS IMPORTANTE
+            modalShelfSelect.add(option);
+        });
+
+    } catch (error) {
+        document.getElementById('shelves-list').innerHTML = '<li>Erro ao carregar estantes.</li>';
+        console.error('Erro em loadShelves:', error);
     }
+}
     
     async function editShelfName(shelfId, oldName) {
         const newName = prompt('Digite o novo nome para a estante:', oldName);
