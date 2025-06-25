@@ -1,4 +1,4 @@
-// backend/server.js - VERSÃO COMPLETA E ALTERADA
+// backend/server.js - VERSÃO COMPLETA E CORRIGIDA
 
 require('dotenv').config();
 const express = require('express');
@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 // ROTA PARA LISTAR TODAS AS ESTANTES
 app.get('/api/estantes', async (req, res) => {
     try {
-        const estantes = await db('Estantes').select('*').orderBy('nome_estante', 'asc');
+        const estantes = await db('Estantes').select('*').orderBy('nome', 'asc'); // <<< CORREÇÃO AQUI (nome da coluna)
         res.json(estantes);
     } catch (error) {
         console.error("Erro ao listar estantes:", error);
@@ -31,13 +31,13 @@ app.get('/api/estantes', async (req, res) => {
 // ROTA PARA CRIAR UMA NOVA ESTANTE
 app.post('/api/estantes', async (req, res) => {
     try {
-        const { nome_estante } = req.body;
-        if (!nome_estante || nome_estante.trim() === '') {
+        const { nome } = req.body; // <<< CORREÇÃO AQUI (nome do campo)
+        if (!nome || nome.trim() === '') {
             return res.status(400).json({ message: "O nome da estante é obrigatório." });
         }
         
         const [estanteAdicionada] = await db('Estantes')
-            .insert({ nome_estante: nome_estante.trim() })
+            .insert({ nome: nome.trim() }) // <<< CORREÇÃO AQUI (nome da coluna)
             .returning('*');
 
         res.status(201).json(estanteAdicionada);
@@ -52,15 +52,15 @@ app.post('/api/estantes', async (req, res) => {
 });
 
 // ROTA PARA ATUALIZAR NOME DA ESTANTE
-app.put('/api/estantes/:id', async (req, res) => {
+app.patch('/api/estantes/:id', async (req, res) => { // <<< MUDANÇA AQUI: Usando PATCH que é mais apropriado para atualizações parciais
     try {
         const { id } = req.params;
-        const { nome_estante } = req.body;
-        if (!nome_estante || nome_estante.trim() === '') {
+        const { nome } = req.body; // <<< CORREÇÃO AQUI (nome do campo)
+        if (!nome || nome.trim() === '') {
             return res.status(400).json({ message: "O nome da estante é obrigatório." });
         }
 
-        const count = await db('Estantes').where({ id_estante: id }).update({ nome_estante: nome_estante.trim() });
+        const count = await db('Estantes').where({ id_estante: id }).update({ nome: nome.trim() }); // <<< CORREÇÃO AQUI (nome da coluna)
 
         if (count > 0) {
             res.status(200).json({ message: "Estante atualizada com sucesso." });
@@ -80,18 +80,12 @@ app.put('/api/estantes/:id', async (req, res) => {
 app.delete('/api/estantes/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        let success = false;
-
-        await db.transaction(async trx => {
-            await trx('Livros_Estante').where({ id_estante_fk: id }).del();
-            const count = await trx('Estantes').where({ id_estante: id }).del();
-            if (count > 0) {
-                success = true;
-            }
-        });
-
-        if (success) {
-            res.status(200).json({ message: "Estante removida com sucesso." });
+        // O `onDelete('CASCADE')` na migração já cuida de apagar as referências
+        // em `Livros_Estante`, então a transação não é estritamente necessária.
+        const count = await db('Estantes').where({ id_estante: id }).del();
+        
+        if (count > 0) {
+            res.status(204).send(); // <<< MUDANÇA AQUI: 204 No Content é a resposta padrão para delete com sucesso
         } else {
             res.status(404).json({ message: "Estante não encontrada." });
         }
@@ -107,12 +101,13 @@ app.delete('/api/estantes/:id', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-// --- ALTERAÇÃO AQUI: ROTA DE LISTAR LIVROS AGORA RETORNA O STATUS ---
+// ROTA PARA LISTAR OS LIVROS DE UMA ESTANTE
 app.get('/api/estantes/:id/livros', async (req, res) => {
     try {
         const { id } = req.params;
         const livros = await db('Livros_Estante')
-            .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.id_livro')
+            // <<< CORREÇÃO AQUI: Junção correta usando google_book_id
+            .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.google_book_id')
             .where({ id_estante_fk: id })
             .select(
                 'Livros.*', 
@@ -130,7 +125,6 @@ app.get('/api/estantes/:id/livros', async (req, res) => {
 // ROTA PARA ADICIONAR UM LIVRO A UMA ESTANTE
 app.post('/api/estantes/:id/livros', async (req, res) => {
     const { id: id_estante_fk } = req.params;
-    // --- ALTERAÇÃO AQUI: Recebendo o status do front-end ---
     const { google_book_id, titulo, autores, capa_url, descricao, status } = req.body;
 
     if (!google_book_id) {
@@ -139,40 +133,29 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
 
     try {
         await db.transaction(async trx => {
-            let livro = await trx('Livros').where({ google_book_id }).first();
-            let id_livro_fk;
-
-            if (livro) {
-                id_livro_fk = livro.id_livro;
-            } else {
-                const [livroInserido] = await trx('Livros').insert({
+            // Garante que o livro existe na tabela 'Livros' antes de adicioná-lo à estante
+            await trx('Livros')
+                .insert({
                     google_book_id,
                     titulo,
-                    autores: autores ? autores.join(', ') : 'Autor desconhecido',
+                    autores: JSON.stringify(autores || []), // <<< CORREÇÃO AQUI: Salva como JSON
                     capa_url,
                     descricao
-                }).returning('id_livro');
-                id_livro_fk = livroInserido.id_livro;
-            }
-            
-            const existingRelation = await trx('Livros_Estante').where({ id_livro_fk, id_estante_fk }).first();
-            if (existingRelation) {
-                const err = new Error('DUPLICATE_ENTRY');
-                err.code = '23505';
-                throw err;
-            }
+                })
+                .onConflict('google_book_id') // Se o livro já existe (baseado no ID único do Google)
+                .ignore();                  // não faz nada, apenas segue em frente.
 
-            // --- ALTERAÇÃO AQUI: Salvando o status ao criar a associação ---
+            // Insere a associação na tabela 'Livros_Estante'
             await trx('Livros_Estante').insert({ 
-                id_livro_fk, 
+                id_livro_fk: google_book_id, // <<< CORREÇÃO AQUI: Usando a chave correta
                 id_estante_fk, 
-                status: status || 'Quero Ler' // Usa o status enviado ou o padrão 'Quero Ler'
+                status: status || 'Quero Ler'
             });
         });
 
         res.status(201).json({ message: "Livro adicionado à estante com sucesso." });
     } catch (error) {
-        if (error.code === '23505') {
+        if (error.code === '23505') { // Código de erro para violação de unicidade
             return res.status(409).json({ message: "Este livro já está nesta estante." });
         }
         console.error("Erro ao adicionar livro à estante:", error);
@@ -184,17 +167,14 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
 app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
     try {
         const { shelfId, bookId } = req.params;
-        const livro = await db('Livros').where({ google_book_id: bookId }).first();
-        if (!livro) {
-            return res.status(404).json({ message: "Livro não encontrado no sistema." });
-        }
-
+        
         const count = await db('Livros_Estante')
-            .where({ id_estante_fk: shelfId, id_livro_fk: livro.id_livro })
+             // <<< CORREÇÃO AQUI: Usando as chaves corretas para o delete
+            .where({ id_estante_fk: shelfId, id_livro_fk: bookId })
             .del();
         
         if (count > 0) {
-            res.status(200).json({ message: "Livro removido da estante." });
+            res.status(204).send();
         } else {
             res.status(404).json({ message: "Este livro não foi encontrado nesta estante." });
         }
@@ -206,7 +186,7 @@ app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| --- NOVAS ROTAS PARA GERENCIAR STATUS ---
+| Rotas para gerenciar STATUS
 |--------------------------------------------------------------------------
 */
 
@@ -214,11 +194,11 @@ app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
 app.get('/api/livros/status/:status', async (req, res) => {
     try {
         const { status } = req.params;
-        // O status virá com encode de URI (ex: "Quero%20Ler"), então decodificamos.
         const decodedStatus = decodeURIComponent(status);
         
         const livros = await db('Livros_Estante')
-            .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.id_livro')
+            // <<< CORREÇÃO AQUI: Junção correta usando google_book_id
+            .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.google_book_id')
             .where('Livros_Estante.status', decodedStatus)
             .select(
                 'Livros.*',
@@ -245,7 +225,7 @@ app.patch('/api/livros_estante/:id_associacao/status', async (req, res) => {
         const [updatedEntry] = await db('Livros_Estante')
             .where({ id_associacao: id_associacao })
             .update({ status: status })
-            .returning('*'); // Retorna a entrada atualizada
+            .returning('*');
 
         if (updatedEntry) {
             res.status(200).json(updatedEntry);
