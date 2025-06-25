@@ -1,8 +1,6 @@
-// frontend/script.js - VERSÃO COMPLETA E ALTERADA
-
 document.addEventListener('DOMContentLoaded', () => {
     const GOOGLE_API_URL = 'https://www.googleapis.com/books/v1/volumes';
-    const API_BASE_URL = window.API_URL;
+    const API_BASE_URL = window.API_URL; // Vem do config.js
 
     const toHttps = (url) => {
         if (!url) return 'https://via.placeholder.com/180x260.png?text=Sem+Capa';
@@ -14,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const menuLinks = document.querySelectorAll('.sidebar-menu .menu-link');
     const searchInput = document.getElementById('searchInput');
     const addShelfBtn = document.getElementById('add-shelf-btn');
+    const shelvesList = document.getElementById('shelves-list');
     
     // Modal de Adicionar à Estante
     const addToShelfModal = document.getElementById('add-to-shelf-modal');
@@ -21,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelAddBtn = document.getElementById('modal-cancel-btn');
     const modalStatusSelect = document.getElementById('modal-status-select');
 
-    // --- NOVAS VARIÁVEIS PARA O MODAL DE STATUS ---
+    // Modal de Alterar Status
     const changeStatusModal = document.getElementById('change-status-modal');
     const confirmStatusBtn = document.getElementById('status-modal-confirm-btn');
     const cancelStatusBtn = document.getElementById('status-modal-cancel-btn');
@@ -37,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
         READ: 'Lido'
     };
 
-
     // --- FUNÇÕES DE LÓGICA E CONTROLE ---
 
     async function handleFetchError(response) {
@@ -49,15 +47,26 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) { /* corpo do erro não era JSON */ }
             throw new Error(errorMessage);
         }
-        return response.json(); // Já converte para JSON
+        // Se o status for 204 (No Content), não há corpo para converter para JSON
+        if (response.status === 204) {
+            return null;
+        }
+        return response.json();
     }
 
     function switchView(viewId) {
         views.forEach(view => view.classList.add('hidden'));
-        document.getElementById(viewId)?.classList.remove('hidden');
-        document.querySelector('.menu-link.active')?.classList.remove('active');
+        const targetView = document.getElementById(viewId);
+        if (targetView) {
+            targetView.classList.remove('hidden');
+        }
+
+        document.querySelectorAll('.menu-link.active, .shelf-link.active').forEach(link => link.classList.remove('active'));
+        
         const activeLink = document.querySelector(`.menu-link[data-view="${viewId}"]`) || document.querySelector(`.shelf-link[data-shelf-id="${currentShelf.id}"]`);
-        activeLink?.classList.add('active');
+        if (activeLink) {
+            activeLink.classList.add('active');
+        }
     }
 
     // --- FUNÇÕES DE INICIALIZAÇÃO E NAVEGAÇÃO ---
@@ -68,6 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const viewId = link.dataset.view;
             if (viewId === 'home-view') {
                 loadHomePage();
+            }
+            if (viewId === 'search-view') {
+                document.getElementById('searchResults').innerHTML = '<p>Busque por um livro para ver os resultados.</p>';
             }
             currentShelf = { id: null, name: null };
             switchView(viewId);
@@ -81,7 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
         switchView('home-view');
     });
 
-    // --- NOVA FUNÇÃO PARA CARREGAR A HOME PAGE ---
     async function loadHomePage() {
         const grid = document.getElementById('home-books-grid');
         grid.innerHTML = `<p>Carregando sua lista de leitura...</p>`;
@@ -94,12 +105,103 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LÓGICA DAS ESTANTES ---
+    // --- LÓGICA DAS ESTANTES (LÓGICA RESTAURADA) ---
 
-    addShelfBtn.addEventListener('click', async () => { /* ... código sem alteração ... */ });
-    async function loadShelves() { /* ... código sem alteração ... */ }
-    async function editShelfName(shelfId, oldName) { /* ... código sem alteração ... */ }
-    async function deleteShelf(shelfId, shelfName) { /* ... código sem alteração ... */ }
+    addShelfBtn.addEventListener('click', async () => {
+        const shelfName = prompt('Digite o nome da nova estante:');
+        if (shelfName && shelfName.trim() !== '') {
+            try {
+                await fetch(`${API_BASE_URL}/estantes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome: shelfName.trim() })
+                }).then(handleFetchError);
+                loadShelves(); // Recarrega a lista de estantes
+            } catch (error) {
+                alert(`Erro ao criar estante: ${error.message}`);
+            }
+        }
+    });
+
+    async function loadShelves() {
+        try {
+            const shelves = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError);
+            shelvesList.innerHTML = '';
+            shelves.forEach(shelf => {
+                const shelfContainer = document.createElement('div');
+                shelfContainer.className = 'shelf-item-container';
+                shelfContainer.innerHTML = `
+                    <a href="#" class="shelf-link" data-shelf-id="${shelf.id}">${shelf.nome}</a>
+                    <div class="shelf-actions">
+                        <i class="fa-solid fa-pencil edit-shelf-btn" title="Renomear"></i>
+                        <i class="fa-solid fa-trash-can delete-shelf-btn" title="Excluir"></i>
+                    </div>
+                `;
+                shelvesList.appendChild(shelfContainer);
+            });
+            
+            // Adiciona os event listeners após criar os elementos
+            shelvesList.querySelectorAll('.shelf-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const shelfId = link.dataset.shelfId;
+                    loadBooksFromShelf(shelfId, link.textContent);
+                });
+            });
+
+            shelvesList.querySelectorAll('.edit-shelf-btn').forEach((btn, index) => {
+                btn.addEventListener('click', () => editShelfName(shelves[index].id, shelves[index].nome));
+            });
+
+            shelvesList.querySelectorAll('.delete-shelf-btn').forEach((btn, index) => {
+                btn.addEventListener('click', () => deleteShelf(shelves[index].id, shelves[index].nome));
+            });
+            
+            // Atualiza o select do modal também
+            const modalShelfSelect = document.getElementById('modal-shelf-select');
+            modalShelfSelect.innerHTML = '';
+            shelves.forEach(shelf => {
+                const option = new Option(shelf.nome, shelf.id);
+                modalShelfSelect.add(option);
+            });
+
+        } catch (error) {
+            shelvesList.innerHTML = '<li>Erro ao carregar estantes.</li>';
+            console.error('Erro em loadShelves:', error);
+        }
+    }
+    
+    async function editShelfName(shelfId, oldName) {
+        const newName = prompt('Digite o novo nome para a estante:', oldName);
+        if (newName && newName.trim() !== '' && newName !== oldName) {
+            try {
+                await fetch(`${API_BASE_URL}/estantes/${shelfId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome: newName.trim() })
+                }).then(handleFetchError);
+                loadShelves();
+            } catch (error) {
+                alert(`Erro ao renomear estante: ${error.message}`);
+            }
+        }
+    }
+    
+    async function deleteShelf(shelfId, shelfName) {
+        if (confirm(`Tem certeza que deseja excluir a estante "${shelfName}"? Todos os livros nela serão removidos.`)) {
+            try {
+                await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { method: 'DELETE' }).then(handleFetchError);
+                loadShelves();
+                // Se a estante deletada era a que estava sendo vista, volta para a home
+                if (currentShelf.id === shelfId) {
+                    loadHomePage();
+                    switchView('home-view');
+                }
+            } catch (error) {
+                alert(`Erro ao excluir estante: ${error.message}`);
+            }
+        }
+    }
 
     // --- LÓGICA DOS LIVROS ---
 
@@ -117,7 +219,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LÓGICA DE STATUS (NOVO) ---
+    async function removeBookFromShelf(googleBookId, shelfId) {
+        if (confirm('Tem certeza que deseja remover este livro da estante?')) {
+            try {
+                await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros/${googleBookId}`, {
+                    method: 'DELETE'
+                }).then(handleFetchError);
+                // Recarrega a estante atual
+                loadBooksFromShelf(shelfId, currentShelf.name);
+            } catch (error) {
+                alert(`Erro ao remover livro: ${error.message}`);
+            }
+        }
+    }
+
+    // --- LÓGICA DE STATUS ---
     function openChangeStatusModal(book) {
         currentBookInShelf = book;
         document.getElementById('status-modal-book-title').textContent = book.titulo;
@@ -129,23 +245,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     confirmStatusBtn.addEventListener('click', async () => {
         const newStatus = statusModalSelectUpdate.value;
-        if (!currentBookInShelf) return;
+        if (!currentBookInShelf || !currentBookInShelf.id_associacao) return;
 
         try {
-            const response = await fetch(`${API_BASE_URL}/livros_estante/${currentBookInShelf.id_associacao}/status`, {
+            await fetch(`${API_BASE_URL}/livros_estante/${currentBookInShelf.id_associacao}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
-            });
-            await handleFetchError(response);
+            }).then(handleFetchError);
+            
             alert('Status atualizado com sucesso!');
             changeStatusModal.classList.add('hidden');
 
-            // Recarrega a view atual para refletir a mudança
-            if (currentShelf.id) {
-                loadBooksFromShelf(currentShelf.id, currentShelf.name);
+            if (document.getElementById('detail-view').classList.contains('hidden')) {
+                 // Recarrega a view de lista (home ou estante)
+                if (currentShelf.id) {
+                    loadBooksFromShelf(currentShelf.id, currentShelf.name);
+                } else {
+                    loadHomePage();
+                }
             } else {
-                loadHomePage();
+                // Recarrega os detalhes do livro para mostrar o status novo
+                displayBookDetails(currentBookInShelf.google_book_id || currentBookInShelf.id, {
+                    ...currentBookInShelf,
+                    status: newStatus
+                });
             }
         } catch (error) {
             alert(`Erro ao atualizar status: ${error.message}`);
@@ -155,15 +279,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- FUNÇÕES DE BUSCA E EXIBIÇÃO ---
 
     let searchTimeout;
-    searchInput.addEventListener('keyup', (e) => { /* ... código sem alteração ... */ });
-    async function searchGoogleBooks(query, containerId = 'searchResults') { /* ... código sem alteração ... */ }
+    searchInput.addEventListener('keyup', (e) => {
+        clearTimeout(searchTimeout);
+        if (e.key === 'Enter' || searchInput.value.length > 2) {
+            searchTimeout = setTimeout(() => {
+                searchGoogleBooks(searchInput.value);
+            }, 500); // Debounce para evitar muitas requisições
+        }
+    });
+
+    async function searchGoogleBooks(query, containerId = 'searchResults') {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '<p>Buscando...</p>';
+        try {
+            const response = await fetch(`${GOOGLE_API_URL}?q=${encodeURIComponent(query)}&maxResults=20`);
+            const data = await response.json();
+            displayBooks(data.items, container, { context: 'search' });
+        } catch (error) {
+            container.innerHTML = `<p>Erro na busca: ${error.message}</p>`;
+        }
+    }
 
     function displayBooks(books, container, options = { context: 'search' }) {
         container.innerHTML = '';
         if (!books || books.length === 0) {
-            container.innerHTML = (options.context === 'home')
-                ? `<p>Você ainda não marcou nenhum livro como "Quero Ler".</p>`
-                : `<p>Nenhum livro encontrado.</p>`;
+            container.innerHTML = `<p>${options.context === 'home' ? 'Nenhum livro como "Quero Ler". Busque e adicione novos livros!' : 'Nenhum livro encontrado.'}</p>`;
             return;
         }
 
@@ -183,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
-            // --- ALTERAÇÃO AQUI: Adiciona o botão de status ---
             if (book.status) {
                 const statusBadge = document.createElement('div');
                 statusBadge.className = `status-badge status-${book.status.toLowerCase().replace(' ', '-')}`;
@@ -193,37 +332,115 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.stopPropagation();
                     openChangeStatusModal(book);
                 };
-                card.appendChild(statusBadge);
+                card.prepend(statusBadge);
             }
 
-            card.querySelector('img').addEventListener('click', () => displayBookDetails(googleId, { shelfId: options.shelfId, id_associacao: book.id_associacao, status: book.status }));
+            const imgElement = card.querySelector('img');
+            if(imgElement) {
+                imgElement.addEventListener('click', () => displayBookDetails(googleId, { shelfId: options.shelfId, id_associacao: book.id_associacao, status: book.status, google_book_id: googleId }));
+            }
+            
             if (options.context === 'shelf') {
-                card.querySelector('.remove-book-btn').addEventListener('click', () => removeBookFromShelf(googleId, options.shelfId));
+                const removeBtn = card.querySelector('.remove-book-btn');
+                if(removeBtn) {
+                   removeBtn.addEventListener('click', (e) => {
+                       e.stopPropagation();
+                       removeBookFromShelf(googleId, options.shelfId);
+                   });
+                }
             }
             container.appendChild(card);
         });
     }
 
     async function displayBookDetails(googleBookId, bookContext = {}) {
-        // ... (código existente para buscar no Google API e preencher detalhes)
-
-        currentBookInShelf = bookContext; // Guarda o contexto do livro na estante
+        const view = document.getElementById('detail-view');
+        view.innerHTML = '<p>Carregando detalhes...</p>'; // Limpa a view e mostra carregando
+        switchView('detail-view');
         
-        // --- ALTERAÇÃO AQUI: Mostra o status e o botão de alterar ---
-        const statusSection = document.querySelector('.detail-status-section');
-        const currentStatusEl = document.getElementById('detail-current-status');
-        const changeStatusBtn = document.getElementById('detail-change-status-btn');
+        try {
+            // Busca os detalhes completos na API do Google
+            const response = await fetch(`${GOOGLE_API_URL}/${googleBookId}`);
+            currentBookData = await response.json(); // Salva os dados completos
+            
+            // Recarrega o HTML original da view, pois ele foi substituído pelo "Carregando..."
+            view.innerHTML = `
+                <div class="view-header">
+                    <button id="detail-back-to-shelf-btn" class="btn-link hidden"><i class="fa-solid fa-arrow-left"></i> <span id="back-to-shelf-name">Voltar</span></button>
+                </div>
+                <div class="detail-content">
+                    <div class="detail-left">
+                        <h1 id="detail-title"></h1>
+                        <p class="detail-author">Por <span id="detail-author-name"></span></p>
+                        <div class="detail-status-section hidden">
+                            <span>Status:</span>
+                            <strong id="detail-current-status">Nenhum</strong>
+                            <button id="detail-change-status-btn" class="btn-link-small"><i class="fa-solid fa-pencil"></i> Alterar</button>
+                        </div>
+                        <p id="detail-description"></p>
+                        <div class="detail-actions">
+                            <button id="detail-add-to-shelf-btn"><i class="fa-solid fa-plus"></i> Adicionar à Estante</button>
+                            <button id="detail-remove-from-shelf-btn" class="btn-danger hidden"><i class="fa-solid fa-trash-can"></i> Remover da Estante</button>
+                        </div>
+                    </div>
+                    <div class="detail-right">
+                        <img id="detail-cover" src="" alt="Capa do livro">
+                    </div>
+                </div>
+                <div class="similar-books">
+                    <h2>Mais Livros Similares</h2>
+                    <div id="similar-books-grid" class="book-grid"></div>
+                </div>`;
+            
+            // Preenche os detalhes
+            document.getElementById('detail-title').textContent = currentBookData.volumeInfo.title || 'Título não encontrado';
+            document.getElementById('detail-author-name').textContent = currentBookData.volumeInfo.authors?.join(', ') || 'Autor desconhecido';
+            document.getElementById('detail-description').innerHTML = currentBookData.volumeInfo.description || 'Descrição não disponível.';
+            document.getElementById('detail-cover').src = toHttps(currentBookData.volumeInfo.imageLinks?.thumbnail);
 
-        if (bookContext.status) {
-            currentStatusEl.textContent = bookContext.status;
-            changeStatusBtn.onclick = () => openChangeStatusModal(bookContext);
-            statusSection.classList.remove('hidden');
-            changeStatusBtn.classList.remove('hidden');
-        } else {
-            statusSection.classList.add('hidden');
+            currentBookInShelf = bookContext;
+
+            // Lógica para mostrar o status
+            const statusSection = document.querySelector('.detail-status-section');
+            if (bookContext.status) {
+                document.getElementById('detail-current-status').textContent = bookContext.status;
+                statusSection.classList.remove('hidden');
+                document.getElementById('detail-change-status-btn').onclick = () => openChangeStatusModal(bookContext);
+            } else {
+                statusSection.classList.add('hidden');
+            }
+
+            // Lógica para botões de adicionar/remover
+            const addBtn = document.getElementById('detail-add-to-shelf-btn');
+            const removeBtn = document.getElementById('detail-remove-from-shelf-btn');
+            if (bookContext.shelfId) {
+                addBtn.classList.add('hidden');
+                removeBtn.classList.remove('hidden');
+                removeBtn.onclick = () => removeBookFromShelf(googleBookId, bookContext.shelfId);
+            } else {
+                addBtn.classList.remove('hidden');
+                removeBtn.classList.add('hidden');
+                addBtn.onclick = openAddToShelfModal;
+            }
+
+            // Botão de voltar
+            const backBtn = document.getElementById('detail-back-to-shelf-btn');
+            if (currentShelf.id) {
+                backBtn.classList.remove('hidden');
+                document.getElementById('back-to-shelf-name').textContent = `Voltar para ${currentShelf.name}`;
+                backBtn.onclick = () => loadBooksFromShelf(currentShelf.id, currentShelf.name);
+            } else {
+                 backBtn.classList.add('hidden');
+            }
+
+            // Lógica de livros similares (opcional, busca por autor)
+            if (currentBookData.volumeInfo.authors) {
+                searchGoogleBooks(`inauthor:"${currentBookData.volumeInfo.authors[0]}"`, 'similar-books-grid');
+            }
+
+        } catch (error) {
+            view.innerHTML = `<p>Erro ao carregar detalhes do livro: ${error.message}</p>`;
         }
-
-        // ... (código existente para botões de remover/voltar)
     }
 
     // --- LÓGICA DO MODAL DE ADICIONAR LIVRO ---
@@ -241,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     confirmAddBtn.addEventListener('click', async () => {
         const selectedShelfId = document.getElementById('modal-shelf-select').value;
-        const selectedStatus = modalStatusSelect.value; // Pega o status escolhido
+        const selectedStatus = modalStatusSelect.value;
         if (!currentBookData || !selectedShelfId) return;
 
         const bookData = {
@@ -250,19 +467,17 @@ document.addEventListener('DOMContentLoaded', () => {
             autores: currentBookData.volumeInfo.authors || [],
             capa_url: currentBookData.volumeInfo.imageLinks?.thumbnail || null,
             descricao: currentBookData.volumeInfo.description || null,
-            status: selectedStatus // Envia o status para a API
+            status: selectedStatus
         };
         
         try {
-            const response = await fetch(`${API_BASE_URL}/estantes/${selectedShelfId}/livros`, {
+            await fetch(`${API_BASE_URL}/estantes/${selectedShelfId}/livros`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookData)
-            });
-            await handleFetchError(response);
+            }).then(handleFetchError);
             alert(`'${bookData.titulo}' foi adicionado com sucesso!`);
             addToShelfModal.classList.add('hidden');
-            // Recarrega a estante para ver o novo livro
             const shelfName = document.getElementById('modal-shelf-select').selectedOptions[0].text;
             loadBooksFromShelf(selectedShelfId, shelfName);
         } catch (error) {
