@@ -1,6 +1,12 @@
+// frontend/script.js
+
 document.addEventListener('DOMContentLoaded', () => {
     const GOOGLE_API_URL = 'https://www.googleapis.com/books/v1/volumes';
-    const LOCAL_API_URL = 'http://localhost:3000/api'; // !!! CONFIRA SEU IP !!!
+    
+    // MUDANÇA PRINCIPAL AQUI:
+    // 1. Apagamos a variável antiga "LOCAL_API_URL".
+    // 2. Criamos uma nova constante que pega o valor preparado pelo config.js.
+    const API_BASE_URL = window.API_URL;
 
     const views = document.querySelectorAll('.view');
     const menuLinks = document.querySelectorAll('.sidebar-menu .menu-link');
@@ -39,14 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
     menuLinks.forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            currentShelf = { id: null, name: null }; // Reseta a estante atual ao sair
+            currentShelf = { id: null, name: null };
             switchView(link.dataset.view);
         });
     });
 
     document.querySelector('.sidebar-logo').addEventListener('click', (e) => {
         e.preventDefault();
-        currentShelf = { id: null, name: null }; // Reseta a estante atual ao sair
+        currentShelf = { id: null, name: null };
         switchView('home-view');
     });
 
@@ -56,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const shelfName = prompt("Digite o nome da nova estante:");
         if (shelfName?.trim()) {
             try {
-                const response = await fetch(`${LOCAL_API_URL}/estantes`, {
+                const response = await fetch(`${API_BASE_URL}/estantes`, { // <-- MUDANÇA AQUI
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nome_estante: shelfName.trim() })
@@ -72,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadShelves() {
         try {
-            const response = await fetch(`${LOCAL_API_URL}/estantes`).then(handleFetchError);
+            const response = await fetch(`${API_BASE_URL}/estantes`).then(handleFetchError); // <-- MUDANÇA AQUI
             const shelves = await response.json();
             
             const shelvesList = document.getElementById('shelves-list');
@@ -118,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newName = prompt("Digite o novo nome para a estante:", oldName);
         if (newName?.trim() && newName.trim() !== oldName) {
             try {
-                const response = await fetch(`${LOCAL_API_URL}/estantes/${shelfId}`, {
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { // <-- MUDANÇA AQUI
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nome_estante: newName.trim() })
@@ -135,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function deleteShelf(shelfId, shelfName) {
         if (confirm(`Tem certeza que deseja excluir a estante "${shelfName}"?`)) {
             try {
-                const response = await fetch(`${LOCAL_API_URL}/estantes/${shelfId}`, { method: 'DELETE' });
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}`, { method: 'DELETE' }); // <-- MUDANÇA AQUI
                 await handleFetchError(response);
                 alert('Estante excluída com sucesso!');
                 if (currentShelf.id === shelfId) {
@@ -158,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switchView('shelf-view');
         
         try {
-            const response = await fetch(`${LOCAL_API_URL}/estantes/${shelfId}/livros`).then(handleFetchError);
+            const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros`).then(handleFetchError); // <-- MUDANÇA AQUI
             const books = await response.json();
             displayBooks(books, shelfBooksDiv, { context: 'shelf', shelfId });
         } catch(error) {
@@ -169,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function removeBookFromShelf(googleBookId, shelfId) {
         if (confirm("Tem certeza que deseja remover este livro da estante?")) {
             try {
-                const response = await fetch(`${LOCAL_API_URL}/estantes/${shelfId}/livros/${googleBookId}`, { method: 'DELETE' });
+                const response = await fetch(`${API_BASE_URL}/estantes/${shelfId}/livros/${googleBookId}`, { method: 'DELETE' }); // <-- MUDANÇA AQUI
                 await handleFetchError(response);
                 alert('Livro removido com sucesso!');
                 loadBooksFromShelf(shelfId, currentShelf.name);
@@ -228,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ALTERAÇÃO PRINCIPAL AQUI
     async function displayBookDetails(googleBookId, shelfId = null) {
         switchView('detail-view');
         document.querySelector('.main-content').scrollTop = 0;
@@ -245,13 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('detail-cover').src = info.imageLinks?.thumbnail || 'https://via.placeholder.com/300x450.png?text=Sem+Capa';
             
             document.getElementById('detail-add-to-shelf-btn').onclick = openAddToShelfModal;
-
-            // Lógica dos botões de ação com base no contexto (shelfId)
+            
             const removeBtn = document.getElementById('detail-remove-from-shelf-btn');
             const backBtn = document.getElementById('detail-back-to-shelf-btn');
 
             if (shelfId) {
-                // Veio de uma estante
                 removeBtn.classList.remove('hidden');
                 removeBtn.onclick = () => removeBookFromShelf(googleBookId, shelfId);
                 
@@ -259,7 +262,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('back-to-shelf-name').textContent = `Voltar para "${currentShelf.name}"`;
                 backBtn.onclick = () => loadBooksFromShelf(currentShelf.id, currentShelf.name);
             } else {
-                // Veio da busca ou outro lugar
                 removeBtn.classList.add('hidden');
                 backBtn.classList.add('hidden');
             }
@@ -270,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 document.getElementById('similar-books-grid').innerHTML = '';
             }
-
         } catch (error) {
             alert(`Não foi possível carregar os detalhes do livro: ${error.message}`);
         }
@@ -304,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         try {
-            const response = await fetch(`${LOCAL_API_URL}/estantes/${selectedShelfId}/livros`, {
+            const response = await fetch(`${API_BASE_URL}/estantes/${selectedShelfId}/livros`, { // <-- MUDANÇA AQUI
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookData)
