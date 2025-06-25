@@ -8,6 +8,9 @@
     --accent-color: #D1B388;
     --danger-color: #e57373;
     --sidebar-width: 260px;
+    --status-quero-ler: #4A90E2;
+    --status-lendo: #F5A623;
+    --status-lido: #7ED321;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -169,12 +172,19 @@ body {
     outline: none;
 }
 
-/* --- ESTILOS DO HEADER DA VIEW (NOVO) --- */
 .view-header {
     margin-bottom: 2rem;
     display: flex;
     align-items: center;
     gap: 1rem;
+}
+
+.view h2 {
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    color: var(--secondary-text);
+    border-bottom: 1px solid var(--secondary-surface);
+    padding-bottom: 1rem;
 }
 
 #shelf-title { margin: 0; }
@@ -202,7 +212,11 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 2rem;
 }
-.book-card { position: relative; }
+.book-card { 
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden; /* Garante que o overlay não vaze */
+}
 .book-card img {
     width: 100%;
     height: auto;
@@ -211,8 +225,9 @@ body {
     border-radius: 8px;
     transition: transform 0.3s, box-shadow 0.3s;
     cursor: pointer;
+    display: block;
 }
-.book-card img:hover {
+.book-card:hover img {
     transform: scale(1.05);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
@@ -233,7 +248,7 @@ body {
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.2s, transform 0.2s;
-    z-index: 2;
+    z-index: 3;
 }
 .book-card:hover .remove-book-btn { opacity: 1; }
 .remove-book-btn:hover { transform: scale(1.1); }
@@ -271,6 +286,7 @@ body {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background-color: rgba(0, 0, 0, 0.7); display: flex; align-items: center;
     justify-content: center; z-index: 1000; backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s;
 }
 .modal-content {
     background-color: var(--primary-surface); padding: 2rem; border-radius: 12px;
@@ -278,19 +294,110 @@ body {
     border: 1px solid var(--secondary-surface);
 }
 .modal-content h3 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-.modal-content p { margin-bottom: 1.5rem; color: var(--secondary-text); }
+.modal-content p { margin-bottom: 1rem; color: var(--secondary-text); }
 .modal-content strong { color: var(--accent-color); font-weight: 600; }
-#modal-shelf-select {
+
+/* AJUSTE PARA MÚLTIPLOS SELECTS NO MODAL */
+.modal-content select {
     width: 100%; padding: 0.8rem; background-color: var(--secondary-surface);
     border: 1px solid #444; color: var(--primary-text); border-radius: 8px;
-    font-size: 1rem; margin-bottom: 2rem;
+    font-size: 1rem; 
+    margin-bottom: 1.5rem; /* Espaçamento entre os selects */
 }
-.modal-actions { display: flex; justify-content: flex-end; gap: 1rem; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;}
 .modal-actions button {
     padding: 0.8rem 1.5rem; border-radius: 8px; border: none;
     font-size: 1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s;
 }
-#modal-cancel-btn { background-color: var(--secondary-surface); color: var(--primary-text); }
-#modal-cancel-btn:hover { background-color: #333; }
-#modal-confirm-add-btn { background-color: var(--accent-color); color: var(--bg-dark); }
-#modal-confirm-add-btn:hover { filter: brightness(1.1); }
+#modal-cancel-btn, #status-modal-cancel-btn { 
+    background-color: var(--secondary-surface); color: var(--primary-text); 
+}
+#modal-cancel-btn:hover, #status-modal-cancel-btn:hover { background-color: #333; }
+#modal-confirm-add-btn, #status-modal-confirm-btn { 
+    background-color: var(--accent-color); color: var(--bg-dark); 
+}
+#modal-confirm-add-btn:hover, #status-modal-confirm-btn:hover { filter: brightness(1.1); }
+
+/*
+|--------------------------------------------------------------------------
+| --- NOVOS ESTILOS PARA A FUNCIONALIDADE DE STATUS ---
+|--------------------------------------------------------------------------
+*/
+
+.book-card-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+    padding: 2rem 1rem 1rem 1rem;
+    border-radius: 0 0 8px 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+.book-card:hover .book-card-overlay {
+    opacity: 1;
+}
+.book-card-title {
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+}
+
+
+.status-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 12px;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+    border: 1px solid rgba(0,0,0,0.2);
+    z-index: 2;
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out;
+}
+.status-badge:hover {
+    transform: scale(1.05);
+    filter: brightness(1.1);
+}
+
+.status-quero-ler { background-color: var(--status-quero-ler); }
+.status-lendo { background-color: var(--status-lendo); }
+.status-lido { background-color: var(--status-lido); }
+
+.detail-status-section {
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+    background-color: var(--secondary-surface);
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.detail-status-section span {
+    color: var(--secondary-text);
+}
+
+.detail-status-section strong {
+    color: var(--primary-text);
+    font-weight: 600;
+}
+
+.btn-link-small {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+    color: var(--accent-color);
+}
+.btn-link-small:hover {
+    background-color: #333;
+}

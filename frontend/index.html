@@ -20,16 +20,19 @@
             <div class="sidebar-shelves">
                 <h3 class="shelves-title">MINHAS ESTANTES</h3>
                 <ul id="shelves-list">
-                    <!-- Estantes e suas ações serão carregadas aqui -->
-                </ul>
+                    </ul>
                 <button id="add-shelf-btn"><i class="fa-solid fa-plus"></i> Nova Estante</button>
             </div>
         </nav>
 
         <main class="main-content">
             <section id="home-view" class="view">
-                <h1>Bem-vindo à sua Livraria</h1>
-                <p>Navegue pelo menu para buscar novos livros ou ver suas estantes.</p>
+                <div class="view-header">
+                    <h1>Início</h1>
+                </div>
+                <h2>Minha Lista de Leitura (Quero Ler)</h2>
+                <div id="home-books-grid" class="book-grid">
+                    </div>
             </section>
 
             <section id="search-view" class="view hidden">
@@ -58,6 +61,13 @@
                     <div class="detail-left">
                         <h1 id="detail-title"></h1>
                         <p class="detail-author">Por <span id="detail-author-name"></span></p>
+                        
+                        <div class="detail-status-section">
+                            <span>Status:</span>
+                            <strong id="detail-current-status">Nenhum</strong>
+                            <button id="detail-change-status-btn" class="btn-link-small hidden"><i class="fa-solid fa-pencil"></i> Alterar</button>
+                        </div>
+
                         <p id="detail-description"></p>
                         <div class="detail-actions">
                             <button id="detail-add-to-shelf-btn"><i class="fa-solid fa-plus"></i> Adicionar à Estante</button>
@@ -82,6 +92,14 @@
             <p>Selecione uma estante para adicionar <strong id="modal-book-title"></strong>:</p>
             <select id="modal-shelf-select">
             </select>
+            
+            <p>Defina um status inicial para este livro:</p>
+            <select id="modal-status-select">
+                <option value="Quero Ler">Quero Ler</option>
+                <option value="Lendo">Lendo</option>
+                <option value="Lido">Lido</option>
+            </select>
+
             <div class="modal-actions">
                 <button id="modal-cancel-btn">Cancelar</button>
                 <button id="modal-confirm-add-btn">Adicionar</button>
@@ -89,7 +107,23 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <div id="change-status-modal" class="modal-wrapper hidden">
+        <div class="modal-content">
+            <h3>Alterar Status de Leitura</h3>
+            <p>Qual o status de <strong id="status-modal-book-title"></strong>?</p>
+            <select id="status-modal-select-update">
+                <option value="Quero Ler">Quero Ler</option>
+                <option value="Lendo">Lendo</option>
+                <option value="Lido">Lido</option>
+            </select>
+            <div class="modal-actions">
+                <button id="status-modal-cancel-btn">Cancelar</button>
+                <button id="status-modal-confirm-btn">Salvar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="config.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

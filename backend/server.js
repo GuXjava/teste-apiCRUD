@@ -1,3 +1,5 @@
+// backend/server.js - VERSÃO COMPLETA E ALTERADA
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -15,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 |--------------------------------------------------------------------------
 */
 
-// ROTA PARA LISTAR TODAS AS ESTANTES (Nenhuma mudança necessária aqui)
+// ROTA PARA LISTAR TODAS AS ESTANTES
 app.get('/api/estantes', async (req, res) => {
     try {
         const estantes = await db('Estantes').select('*').orderBy('nome_estante', 'asc');
@@ -26,7 +28,7 @@ app.get('/api/estantes', async (req, res) => {
     }
 });
 
-// --- MUDANÇA 1: ROTA DE CRIAR ESTANTE ---
+// ROTA PARA CRIAR UMA NOVA ESTANTE
 app.post('/api/estantes', async (req, res) => {
     try {
         const { nome_estante } = req.body;
@@ -34,7 +36,6 @@ app.post('/api/estantes', async (req, res) => {
             return res.status(400).json({ message: "O nome da estante é obrigatório." });
         }
         
-        // Ajustado com .returning('*') para ser compatível com PostgreSQL
         const [estanteAdicionada] = await db('Estantes')
             .insert({ nome_estante: nome_estante.trim() })
             .returning('*');
@@ -42,8 +43,7 @@ app.post('/api/estantes', async (req, res) => {
         res.status(201).json(estanteAdicionada);
 
     } catch (error) {
-        // O código de erro '23505' é para violação de unicidade no PostgreSQL. O seu já estava correto!
-        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+        if (error.code === '23505') {
             return res.status(409).json({ message: "Uma estante com este nome já existe." });
         }
         console.error("Erro ao criar estante:", error);
@@ -51,7 +51,7 @@ app.post('/api/estantes', async (req, res) => {
     }
 });
 
-// ROTA PARA ATUALIZAR NOME DA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
+// ROTA PARA ATUALIZAR NOME DA ESTANTE
 app.put('/api/estantes/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -68,7 +68,7 @@ app.put('/api/estantes/:id', async (req, res) => {
             res.status(404).json({ message: "Estante não encontrada." });
         }
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+        if (error.code === '23505') {
             return res.status(409).json({ message: "Uma estante com este nome já existe." });
         }
         console.error("Erro ao atualizar estante:", error);
@@ -76,7 +76,7 @@ app.put('/api/estantes/:id', async (req, res) => {
     }
 });
 
-// ROTA PARA DELETAR UMA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
+// ROTA PARA DELETAR UMA ESTANTE 
 app.delete('/api/estantes/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -101,21 +101,24 @@ app.delete('/api/estantes/:id', async (req, res) => {
     }
 });
 
-
 /*
 |--------------------------------------------------------------------------
 | Rotas para gerenciar LIVROS dentro das estantes
 |--------------------------------------------------------------------------
 */
 
-// ROTA PARA LISTAR TODOS OS LIVROS DE UMA ESTANTE ESPECÍFICA (Nenhuma mudança necessária aqui)
+// --- ALTERAÇÃO AQUI: ROTA DE LISTAR LIVROS AGORA RETORNA O STATUS ---
 app.get('/api/estantes/:id/livros', async (req, res) => {
     try {
         const { id } = req.params;
         const livros = await db('Livros_Estante')
             .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.id_livro')
             .where({ id_estante_fk: id })
-            .select('Livros.*');
+            .select(
+                'Livros.*', 
+                'Livros_Estante.status', 
+                'Livros_Estante.id_associacao'
+            );
         
         res.json(livros);
     } catch (error) {
@@ -124,10 +127,11 @@ app.get('/api/estantes/:id/livros', async (req, res) => {
     }
 });
 
-// --- MUDANÇA 2: ROTA DE ADICIONAR LIVRO ---
+// ROTA PARA ADICIONAR UM LIVRO A UMA ESTANTE
 app.post('/api/estantes/:id/livros', async (req, res) => {
     const { id: id_estante_fk } = req.params;
-    const { google_book_id, titulo, autores, capa_url, descricao } = req.body;
+    // --- ALTERAÇÃO AQUI: Recebendo o status do front-end ---
+    const { google_book_id, titulo, autores, capa_url, descricao, status } = req.body;
 
     if (!google_book_id) {
         return res.status(400).json({ message: "O ID do livro é obrigatório." });
@@ -141,32 +145,34 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
             if (livro) {
                 id_livro_fk = livro.id_livro;
             } else {
-                // Ajustado com .returning('id_livro') para ser compatível com PostgreSQL
                 const [livroInserido] = await trx('Livros').insert({
                     google_book_id,
                     titulo,
                     autores: autores ? autores.join(', ') : 'Autor desconhecido',
                     capa_url,
                     descricao
-                }).returning('id_livro'); // Pedimos para retornar o objeto com o ID
-
+                }).returning('id_livro');
                 id_livro_fk = livroInserido.id_livro;
             }
             
             const existingRelation = await trx('Livros_Estante').where({ id_livro_fk, id_estante_fk }).first();
             if (existingRelation) {
-                // Lançando um erro com uma mensagem específica para ser pego no catch
                 const err = new Error('DUPLICATE_ENTRY');
-                err.code = '23505'; // Simulando o código de erro para consistência
+                err.code = '23505';
                 throw err;
             }
 
-            await trx('Livros_Estante').insert({ id_livro_fk, id_estante_fk });
+            // --- ALTERAÇÃO AQUI: Salvando o status ao criar a associação ---
+            await trx('Livros_Estante').insert({ 
+                id_livro_fk, 
+                id_estante_fk, 
+                status: status || 'Quero Ler' // Usa o status enviado ou o padrão 'Quero Ler'
+            });
         });
 
         res.status(201).json({ message: "Livro adicionado à estante com sucesso." });
     } catch (error) {
-        if (error.message === 'DUPLICATE_ENTRY' || error.code === 'ER_DUP_ENTRY' || error.code === '23505') {
+        if (error.code === '23505') {
             return res.status(409).json({ message: "Este livro já está nesta estante." });
         }
         console.error("Erro ao adicionar livro à estante:", error);
@@ -174,11 +180,10 @@ app.post('/api/estantes/:id/livros', async (req, res) => {
     }
 });
 
-// ROTA PARA REMOVER UM LIVRO DE UMA ESTANTE (Nenhuma mudança necessária aqui, já era compatível)
+// ROTA PARA REMOVER UM LIVRO DE UMA ESTANTE
 app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
     try {
         const { shelfId, bookId } = req.params;
-        
         const livro = await db('Livros').where({ google_book_id: bookId }).first();
         if (!livro) {
             return res.status(404).json({ message: "Livro não encontrado no sistema." });
@@ -199,6 +204,59 @@ app.delete('/api/estantes/:shelfId/livros/:bookId', async (req, res) => {
     }
 });
 
+/*
+|--------------------------------------------------------------------------
+| --- NOVAS ROTAS PARA GERENCIAR STATUS ---
+|--------------------------------------------------------------------------
+*/
+
+// ROTA PARA BUSCAR TODOS OS LIVROS COM UM STATUS ESPECÍFICO
+app.get('/api/livros/status/:status', async (req, res) => {
+    try {
+        const { status } = req.params;
+        // O status virá com encode de URI (ex: "Quero%20Ler"), então decodificamos.
+        const decodedStatus = decodeURIComponent(status);
+        
+        const livros = await db('Livros_Estante')
+            .join('Livros', 'Livros_Estante.id_livro_fk', '=', 'Livros.id_livro')
+            .where('Livros_Estante.status', decodedStatus)
+            .select(
+                'Livros.*',
+                'Livros_Estante.status',
+                'Livros_Estante.id_associacao'
+            );
+        res.json(livros);
+    } catch (error) {
+        console.error(`Erro ao listar livros com status ${req.params.status}:`, error);
+        res.status(500).json({ message: "Erro interno do servidor." });
+    }
+});
+
+// ROTA PARA ATUALIZAR O STATUS DE UM LIVRO EM UMA ESTANTE
+app.patch('/api/livros_estante/:id_associacao/status', async (req, res) => {
+    try {
+        const { id_associacao } = req.params;
+        const { status } = req.body;
+        
+        if (!status) {
+            return res.status(400).json({ message: "O novo status é obrigatório." });
+        }
+
+        const [updatedEntry] = await db('Livros_Estante')
+            .where({ id_associacao: id_associacao })
+            .update({ status: status })
+            .returning('*'); // Retorna a entrada atualizada
+
+        if (updatedEntry) {
+            res.status(200).json(updatedEntry);
+        } else {
+            res.status(404).json({ message: "Associação livro-estante não encontrada." });
+        }
+    } catch (error) {
+        console.error("Erro ao atualizar status do livro:", error);
+        res.status(500).json({ message: "Erro interno do servidor." });
+    }
+});
 
 // Listener do servidor
 app.listen(PORT, '0.0.0.0', () => {
